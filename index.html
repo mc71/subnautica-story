@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subnautica: A Survivor's Tale</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Serene Ocean (Stone, Slate, Cyan, with Orange accent) -->
+    <!-- Application Structure Plan: A single-page application centered around an interactive map of Planet 4546B. A persistent vertical timeline allows for both chronological and non-linear exploration of the story. Clicking on map markers or timeline events dynamically updates a main content panel with narrative text, character logs, and data visualizations (e.g., creature threat levels). This structure was chosen to transform the linear text-based report into an immersive, explorable world, mirroring the game's core loop of exploration and discovery, enhancing user engagement and understanding of the spatial relationships between key events. -->
+    <!-- Visualization & Content Choices: The core narrative is broken into event-based snippets tied to map locations (Goal: Inform). This is presented in a "PDA" style panel. Creature encounters are visualized using a Chart.js horizontal bar chart to quantify threat levels (Goal: Compare). The multi-chapter rocket construction is tracked via a dynamic progress bar (Goal: Show Change). This approach uses interactive elements and simple data viz to make the story's key challenges (danger, resource gathering, construction) more tangible and engaging for the user, all implemented using HTML/CSS/JS/Chart.js Canvas, confirming no SVG or Mermaid JS is used. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f5f5f4; /* stone-100 */
+        }
+        .timeline-item.active {
+            background-color: #0891b2; /* cyan-600 */
+            color: white;
+            transform: scale(1.05);
+        }
+        .map-marker {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: #f97316; /* orange-500 */
+            border-radius: 50%;
+            border: 2px solid white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .map-marker.active {
+            transform: scale(1.5);
+            background-color: #ea580c; /* orange-600 */
+            box-shadow: 0 0 15px #f97316;
+        }
+        .map-marker::after {
+            content: attr(data-label);
+            position: absolute;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+        }
+        .map-marker:hover::after {
+            opacity: 1;
+            visibility: visible;
+        }
+        .content-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+        .content-panel::-webkit-scrollbar-track {
+            background: #e5e7eb; /* gray-200 */
+        }
+        .content-panel::-webkit-scrollbar-thumb {
+            background-color: #9ca3af; /* gray-400 */
+            border-radius: 10px;
+            border: 2px solid #e5e7eb;
+        }
+        .map-container {
+            background: linear-gradient(to bottom, #164e63, #083344, #0c4a6e, #1e3a8a);
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div class="min-h-screen flex flex-col">
+        <header class="bg-cyan-900 text-white p-4 shadow-lg text-center">
+            <h1 class="text-2xl md:text-3xl font-bold">Subnautica: A Survivor's Tale</h1>
+            <p class="text-sm text-cyan-200 mt-1">An Interactive Log of the 4546B Incident</p>
+        </header>
+
+        <main class="flex-grow flex flex-col md:flex-row p-4 gap-4">
+            
+            <!-- Timeline Sidebar -->
+            <aside class="w-full md:w-1/4 lg:w-1/5 bg-white p-4 rounded-lg shadow-md flex flex-col">
+                <h2 class="text-xl font-bold mb-4 text-cyan-800 border-b pb-2">Mission Timeline</h2>
+                <div id="timeline" class="space-y-2 overflow-y-auto pr-2">
+                    <!-- Timeline items will be injected by JS -->
+                </div>
+                <div class="mt-auto pt-4">
+                    <h3 class="text-lg font-bold mb-2 text-cyan-800">Neptune Rocket Progress</h3>
+                    <div class="w-full bg-gray-200 rounded-full h-4">
+                        <div id="rocket-progress" class="bg-orange-500 h-4 rounded-full transition-all duration-500" style="width: 0%;"></div>
+                    </div>
+                     <p id="progress-text" class="text-xs text-center mt-1 text-slate-600">0% Complete</p>
+                </div>
+            </aside>
+
+            <!-- Main Content: Map and Info Panel -->
+            <div class="w-full md:w-3/4 lg:w-4/5 flex flex-col lg:flex-row gap-4">
+                
+                <!-- Interactive Map -->
+                <div class="w-full lg:w-1/2 h-[50vh] lg:h-auto bg-white rounded-lg shadow-md p-4 relative overflow-hidden map-container">
+                    <h2 class="text-xl font-bold mb-4 text-white">Planet 4546B Overview</h2>
+                    <div id="map" class="w-full h-full relative">
+                        <!-- Map markers will be injected by JS -->
+                        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+                             <p class="text-white/30 font-bold text-5xl tracking-widest uppercase -rotate-12">CRATER</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Information Panel -->
+                <div class="w-full lg:w-1/2 bg-white rounded-lg shadow-md flex flex-col">
+                    <div class="p-4 border-b">
+                        <h2 id="panel-title" class="text-2xl font-bold text-cyan-900"></h2>
+                    </div>
+                    <div id="content-panel" class="p-4 flex-grow overflow-y-auto content-panel">
+                        <div id="panel-content">
+                            <!-- Content will be injected by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const storyData = {
+            auroraCrash: {
+                title: "The Aurora Crash",
+                chapter: 0,
+                timelineLabel: "The Crash",
+                coords: { top: '45%', left: '50%' },
+                narrative: `Alex stumbled, frantically grabbing onto a heavy, anchored table as the ship pitched violently. A deafening roar filled his ears, a cacophony of tearing metal and uncontrolled energy discharge. The panoramic window now showed streaks of fire and massive chunks of debris tearing past. His heart hammered against his ribs. *This was real.* "Emergency escape pod protocol initiated," a new, automated voice announced. Alex scrambled, disoriented and propelled by a primal, overwhelming fear, towards the glowing green outline of an emergency hatch.`,
+                log: {
+                    author: "AURORA AI (Fragmented)",
+                    entry: "Warning! Catastrophic hull integrity compromise... Primary drive core... destabilized... critical fail... oh go— [SIGNAL LOST]"
+                },
+                creatures: null,
+                progress: 0
+            },
+            pod5: {
+                title: "Escape Pod 5",
+                chapter: 1,
+                timelineLabel: "Awakening",
+                coords: { top: '55%', left: '60%' },
+                narrative: `With a deep, shaky breath, Alex dragged himself towards the viewport. What he saw was a vibrant, alien world. Below him, stretching into an impossibly deep abyss, was an endless expanse of turquoise water. Giant, kelp-like stalks swayed gently in an unseen current. Small, darting fish shimmered with electric blues and yellows. A cold dread, mingled with a strange sense of recognition, washed over him. "It's real," he whispered, "All of it."`,
+                log: {
+                    author: "PDA Automated Log",
+                    entry: "Welcome, survivor. Detecting multiple system failures. Hull integrity critical. Recommend immediate repairs and resource acquisition. Commencing environmental scan."
+                },
+                creatures: {
+                    labels: ['Peeper', 'Gasopod', 'Stalker'],
+                    data: [1, 3, 5],
+                    title: "Shallows Fauna Threat Level"
+                },
+                progress: 5
+            },
+            firstEncounter: {
+                title: "A Fateful Shore",
+                chapter: 2,
+                timelineLabel: "First Encounter",
+                coords: { top: '70%', left: '65%' },
+                narrative: `Alex was lying sprawled on a patch of surprisingly soft, dark sand. Standing over him, silhouetted against the blindingly bright sky, was another person. "Easy there, survivor," the man's calm voice cut through the fog. "You took quite a hit. Lucky I was passing by when you washed up." The stranger offered a small, knowing smile. "Name's Kael. Seems we both got a front-row seat to the end of an era."`,
+                log: {
+                    author: "Kael's Log",
+                    entry: "Found another survivor today, from the big ship. A man named Alex. He was in bad shape, hit by a Crashfish. Managed to stabilize him. He has no idea what he's truly walked into. The loneliness might be over, but the danger has just begun."
+                },
+                creatures: {
+                    labels: ['Crashfish'],
+                    data: [6],
+                    title: "Immediate Threat Level"
+                },
+                progress: 10
+            },
+            kaelsBase: {
+                title: "Kael's Legacy Base",
+                chapter: 3,
+                timelineLabel: "Kael's Base",
+                coords: { top: '80%', left: '55%' },
+                narrative: `Nestled in a wide, sprawling grotto was a Cyclops, its massive form sitting proudly in the depths. Moored beside it was a gleaming Prawn Suit. The sight was unfathomable. "How did you build all this?" Alex stammered. Kael smiled, a faint, melancholic expression. "I was here long before the Aurora, Alex. A part of an earlier reconnaissance mission that went... wrong. I've had a head start."`,
+                log: {
+                    author: "Alex's PDA Log",
+                    entry: "Kael's resources are... impossible. A fully operational Cyclops and Prawn suit. He speaks of a prior mission, and an even older one, the 'Degasi'. The history of human failure on this planet runs deeper than I ever imagined. He's a true survivor, but the weight of his past is palpable."
+                },
+                creatures: null,
+                progress: 15
+            },
+            sunbeam: {
+                title: "The Sunbeam Message",
+                chapter: 4,
+                timelineLabel: "The Sunbeam",
+                coords: { top: '10%', left: '10%' },
+                narrative: `A sharp, insistent beeping pierced the quiet hum of the Cyclops. A distorted but unmistakably human voice broke through the static. "...This is Captain Keen of the *Sunbeam*... we are receiving your distress signal... Expect arrival at your last known coordinates in approximately 48 hours." Alex felt a surge of pure elation, but Kael's expression was grim. "The coordinates they're heading for... they’re directly over the Quarantine Enforcement Platform. The cannon."`,
+                log: {
+                    author: "Trans-Gov Ship Sunbeam",
+                    entry: "[AUDIO] We're coming for you. Hold on, survivors."
+                },
+                creatures: null,
+                progress: 20
+            },
+            rocketBuild: {
+                title: "The Ascent of Desperation",
+                chapter: 5,
+                timelineLabel: "Rocket Construction",
+                coords: { top: '85%', left: '45%' },
+                narrative: `The realization that the Sunbeam was flying into a death trap spurred them into a frantic alliance. Their days blurred into an exhausting, perilous routine of diving, extracting, and fabricating. One harrowing dive took them into the Grand Reef, where the Cyclops's sonar picked up the distinct signature of a Ghost Leviathan. "Stay absolutely still," Kael whispered over the comms. The distant, guttural roars of the predator vibrated through the hull, a visceral reminder of their precarious existence.`,
+                log: {
+                    author: "PDA Fabrication Log",
+                    entry: "Fabricated: Plasteel Ingot (x12), Aerogel (x5), Polyaniline (x3). Warning: Local leviathan-class lifeforms detected. Stealth protocols recommended."
+                },
+                creatures: {
+                    labels: ['Ghost Leviathan'],
+                    data: [9],
+                    title: "Grand Reef Threat Level"
+                },
+                progress: 40
+            },
+            cureQuest: {
+                title: "The Kharaa Cure",
+                chapter: 6,
+                timelineLabel: "Quest for the Cure",
+                coords: { top: '90%', left: '15%' },
+                narrative: `A bio-scan revealed the grim truth: they were both infected with the Kharaa bacteria. The cure, Kael explained, lay with the Sea Emperor Leviathan in the Primary Containment Facility, miles below the surface. Their journey descended into a hellish landscape of volcanic vents and terrifying Sea Dragon Leviathans. Finally, they found the colossal, ancient Sea Emperor and collected the glowing green enzyme that held the key to their freedom.`,
+                log: {
+                    author: "Medical Bay Log",
+                    entry: "Synthesized: Enzyme 42. Bio-scans confirm successful neutralization of Kharaa bacterium in both subjects. The planet's quarantine is no longer a biological necessity for us."
+                },
+                creatures: {
+                    labels: ['Sea Dragon Leviathan'],
+                    data: [10],
+                    title: "Lava Zone Threat Level"
+                },
+                progress: 75
+            },
+            disableCannon: {
+                title: "Silencing the Sentinel",
+                chapter: 7,
+                timelineLabel: "Disabling the Cannon",
+                coords: { top: '25%', left: '25%' },
+                narrative: `With the cure synthesized, they raced to the Quarantine Enforcement Platform. Inside, they navigated a labyrinth of corridors, dodging automated security drones. In the central chamber, Kael engaged the turrets while Alex scrambled to the core's control panel. With a final, desperate input, a jolt of energy coursed through the panel, and then, with a profound, echoing *THWUMMMMP*, the entire platform went silent. They had done it.`,
+                log: {
+                    author: "Quarantine Enforcement Platform AI (Deactivated)",
+                    entry: "Protocol 734 overridden. Primary weapon systems offline. Quarantine enforcement... suspended. [SYSTEM SHUTDOWN]"
+                },
+                creatures: {
+                    labels: ['Architect Sentry Drone'],
+                    data: [4],
+                    title: "Platform Security Threat"
+                },
+                progress: 90
+            },
+            escape: {
+                title: "Escape and a New Beginning",
+                chapter: 8,
+                timelineLabel: "The Escape",
+                coords: { top: '50%', left: '85%' },
+                narrative: `With the Sunbeam holding orbit and the cannon silent, they launched their rocket. A deafening roar filled the air as the thrusters ignited, propelling them skyward. Alex's gaze was fixed on the receding planet below—a world of unparalleled beauty and terrifying danger that had almost claimed him. The journey back to Earth was long, but filled with a quiet sense of victory and a burgeoning camaraderie. They had done it. They were going home.`,
+                log: {
+                    author: "Neptune Launch Control",
+                    entry: "All systems nominal. Trajectory stable. Leaving orbit of 4546B. Welcome home, survivors."
+                },
+                creatures: null,
+                progress: 100
+            }
+        };
+
+        let activeChart = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const timelineContainer = document.getElementById('timeline');
+            const mapContainer = document.getElementById('map');
+            
+            const sortedChapters = Object.entries(storyData).sort(([,a], [,b]) => a.chapter - b.chapter);
+
+            sortedChapters.forEach(([key, data]) => {
+                // Populate Timeline
+                const timelineEl = document.createElement('button');
+                timelineEl.className = 'w-full text-left p-3 rounded-md transition-all duration-300 hover:bg-cyan-100 timeline-item';
+                timelineEl.textContent = data.timelineLabel;
+                timelineEl.dataset.id = key;
+                timelineContainer.appendChild(timelineEl);
+
+                // Populate Map
+                const mapMarkerEl = document.createElement('div');
+                mapMarkerEl.className = 'map-marker';
+                mapMarkerEl.style.top = data.coords.top;
+                mapMarkerEl.style.left = data.coords.left;
+                mapMarkerEl.dataset.id = key;
+                mapMarkerEl.dataset.label = data.title;
+                mapContainer.appendChild(mapMarkerEl);
+            });
+            
+            document.querySelectorAll('.timeline-item, .map-marker').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    const id = e.currentTarget.dataset.id;
+                    updateView(id);
+                });
+            });
+
+            // Initial view
+            updateView('auroraCrash');
+        });
+
+        function updateView(id) {
+            const data = storyData[id];
+            if (!data) return;
+
+            // Update active states
+            document.querySelectorAll('.timeline-item.active, .map-marker.active').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll(`.timeline-item[data-id="${id}"], .map-marker[data-id="${id}"]`).forEach(el => el.classList.add('active'));
+
+            // Update Panel
+            const panelTitle = document.getElementById('panel-title');
+            const panelContent = document.getElementById('panel-content');
+
+            panelTitle.textContent = data.title;
+            
+            let contentHTML = `
+                <div class="prose max-w-none text-slate-700">
+                    <h3 class="text-lg font-semibold text-slate-800">Chapter Log</h3>
+                    <p>${data.narrative}</p>
+                </div>
+            `;
+
+            if (data.log) {
+                contentHTML += `
+                <div class="mt-4 p-3 bg-slate-800 text-cyan-300 rounded-lg font-mono text-sm shadow-inner">
+                    <p class="font-bold text-white">> PDA DATA LOG</p>
+                    <p class="border-t border-cyan-700 mt-2 pt-2"><strong class="text-cyan-400">AUTHOR:</strong> ${data.log.author}</p>
+                    <p><strong class="text-cyan-400">ENTRY:</strong> ${data.log.entry}</p>
+                </div>
+                `;
+            }
+
+            if (data.creatures) {
+                contentHTML += `
+                <div class="mt-4">
+                    <h3 class="text-lg font-semibold text-slate-800 mb-2">Encountered Fauna Analysis</h3>
+                    <div class="chart-container h-48 max-w-sm mx-auto p-2 bg-slate-50 rounded-lg">
+                        <canvas id="creature-chart"></canvas>
+                    </div>
+                </div>
+                `;
+            }
+            
+            panelContent.innerHTML = contentHTML;
+
+            // Update Chart
+            if (activeChart) {
+                activeChart.destroy();
+            }
+
+            if (data.creatures) {
+                const ctx = document.getElementById('creature-chart').getContext('2d');
+                activeChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.creatures.labels,
+                        datasets: [{
+                            label: 'Threat Level',
+                            data: data.creatures.data,
+                            backgroundColor: 'rgba(249, 115, 22, 0.6)',
+                            borderColor: 'rgba(249, 115, 22, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            title: {
+                                display: true,
+                                text: data.creatures.title,
+                                color: '#334155'
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                max: 10,
+                                grid: {
+                                    color: 'rgba(0,0,0,0.05)'
+                                }
+                            },
+                            y: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Update Progress Bar
+            const progressBar = document.getElementById('rocket-progress');
+            const progressText = document.getElementById('progress-text');
+            progressBar.style.width = `${data.progress}%`;
+            progressText.textContent = `${data.progress}% Complete`;
+
+        }
+    </script>
+</body>
+</html>
